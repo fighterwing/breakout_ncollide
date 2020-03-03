@@ -1,5 +1,4 @@
 #![allow(unused,warnings)]
-// look we changed the thing!
 
 use nalgebra as nal;
 use std::path;
