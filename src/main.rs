@@ -64,7 +64,7 @@ struct Assets {
 impl Assets {
     fn new(ctx: &mut Context) -> GameResult<Assets> {
         let paddle_img = graphics::Image::new(ctx, "/paddle.png")?;
-        let block_img = graphics::Image::new(ctx, "/block.png")?;
+        let block_img = graphics::Image::new(ctx, "/block-rect.png")?;
         let ball_img = graphics::Image::new(ctx, "/ball.png")?;
 
         Ok(Assets {
@@ -233,7 +233,7 @@ fn create_block() -> Actor {
     Actor {
         tag: ActorType::Block,
         pos: Point2::origin(),
-        size: Point2::new(64.0, 64.0),
+        size: Point2::new(64.0, 32.0),
         color: Color::new(0.8, 0.4, 0.0, 1.0),
         facing: 0.,
         velocity: na::zero(),
@@ -298,12 +298,13 @@ impl MainState {
         let mut block1 = create_block();
         let mut block2 = create_block();
         block1.pos.y -= 50.0;
-        block1.size.x += 25.0;
-        block1.size.y += 25.0;
-        block2.pos.x += 200.0;
-        block2.pos.y += 70.0;
-        block2.size.x += 100.0;
-        block2.size.y += 100.0;
+//        block1.size.x += 25.0;
+//        block1.size.y += 25.0;
+//        block1.pos.y += 60.0;
+        block2.pos.x -= 30.0;
+        block2.pos.y -= 120.0;
+//        block2.size.x += 100.0;
+//        block2.size.y += 100.0;
         let mut assets = Assets::new(ctx)?;
         let (width, height) = graphics::drawable_size(ctx);
         let world = CollisionWorld::new(0.02);
@@ -326,13 +327,13 @@ impl MainState {
     }
     fn load_collision_stuff(&mut self) {
         let contacts_query = GeometricQueryType::Contacts(0.0, 0.0);
-        let rect = ShapeHandle::new(
-            Cuboid::new(nal::Vector2::new(self.block1.size.x/2.0, self.block1.size.y/2.0))
-        );
-        let rect2 = ShapeHandle::new(
-            Cuboid::new(nal::Vector2::new(self.block2.size.x/2.0, self.block2.size.y/2.0))
-        );
-        let rot= std::f32::consts::PI / 4.0;
+        let cub1 = Cuboid::new(nal::Vector2::new((self.block1.size.x/2.0), self.block1.size.y/2.0));
+        let cub2 = Cuboid::new(nal::Vector2::new((self.block2.size.x/2.0), self.block2.size.y/2.0));
+
+        let rect = ShapeHandle::new(cub1);
+        let rect2 = ShapeHandle::new(cub2);
+
+        let rot = -(std::f32::consts::PI / 4.0);
         let pos1 = Isometry2::new(nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), rot);
         let pos2 = Isometry2::new(nal::Vector2::new(self.block2.pos.x, self.block2.pos.y), 0.0);
         let mut groups = CollisionGroups::new();
@@ -345,9 +346,9 @@ impl MainState {
     }
     fn update_collision_stuff(&mut self) {
         if !self.contact {
-            let rot = std::f32::consts::PI / 4.0;
-            self.block1.pos.x += 0.2;
-//            self.block1.pos.y += 0.2;
+            let rot = -(std::f32::consts::PI / 4.0);
+//            self.block1.pos.x -= 0.2;
+            self.block1.pos.y -= 0.2;
             let new_pos = Isometry2::new(nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), rot);
             let handle = self.world.get_mut(self.h1[0]).unwrap();
             handle.set_position(new_pos);
@@ -371,8 +372,8 @@ fn draw_actor(
     );
     let drawparams = graphics::DrawParam::new()
         .dest(pos)
-        .scale(scale)
-        .color(actor.color)
+//        .scale(scale)
+//        .color(actor.color)
         .rotation(std::f32::consts::PI / num)
         .offset(Point2::new(0.5, 0.5));
 
