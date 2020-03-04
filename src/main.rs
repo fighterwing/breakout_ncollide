@@ -9,7 +9,7 @@ use ggez::{Context, GameResult};
 use ggez::graphics::{DrawParam, DrawMode, Rect, MeshBuilder, Color};
 use ggez::input::keyboard::{self, KeyCode, KeyMods};
 
-use ncollide2d::shape::{Cuboid, Ball, ShapeHandle};
+use ncollide2d::shape::{Cuboid, Ball, Capsule, ShapeHandle};
 use ncollide2d::pipeline::world::CollisionWorld;
 use ncollide2d::pipeline::narrow_phase::ContactEvent;
 use ncollide2d::pipeline::object::{CollisionGroups, GeometricQueryType, CollisionObjectSlabHandle,};
@@ -34,7 +34,7 @@ const BALL_THRUST: f32 = 500.0;
 const PADDLE_MAX_VEL: f32 = 400.0;
 const BALL_MAX_VEL: f32 = 250.0;
 
-const BALL_RADIUS: f32 = 8.0;
+const BALL_RADIUS: f32 = 16.0;
 
 enum Axis { X, Y, None, }
 
@@ -63,9 +63,9 @@ struct Assets {
 }
 impl Assets {
     fn new(ctx: &mut Context) -> GameResult<Assets> {
-        let paddle_img = graphics::Image::new(ctx, "/paddle.png")?;
+        let paddle_img = graphics::Image::new(ctx, "/capsule.png")?;
         let block_img = graphics::Image::new(ctx, "/block-rect.png")?;
-        let ball_img = graphics::Image::new(ctx, "/ball.png")?;
+        let ball_img = graphics::Image::new(ctx, "/ball-test.png")?;
 
         Ok(Assets {
             paddle_img,
@@ -284,6 +284,7 @@ fn create_level(rows:i32, cols:i32, assets: &mut Assets) -> Vec::<Actor> {
 struct MainState {
     block1: Actor,
     block2: Actor,
+    capsule: Actor,
     h1: Vec<CollisionObjectSlabHandle>,
     h2: Vec<CollisionObjectSlabHandle>,
     assets: Assets,
@@ -295,16 +296,19 @@ struct MainState {
 }
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        let mut block1 = create_block();
+        let mut block1 = create_ball();
         let mut block2 = create_block();
-        block1.pos.y -= 50.0;
+        let mut capsule = create_paddle();
+//        block1.pos.y -= 50.0;
 //        block1.size.x += 25.0;
 //        block1.size.y += 25.0;
-//        block1.pos.y += 60.0;
-        block2.pos.x -= 30.0;
-        block2.pos.y -= 120.0;
+        block2.pos.x -= 34.0;
+        block2.pos.y += 120.0;
 //        block2.size.x += 100.0;
 //        block2.size.y += 100.0;
+        capsule.size.x = BALL_RADIUS * 2.0;
+        capsule.size.y = 64.0;
+
         let mut assets = Assets::new(ctx)?;
         let (width, height) = graphics::drawable_size(ctx);
         let world = CollisionWorld::new(0.02);
@@ -313,6 +317,7 @@ impl MainState {
         let mut s = MainState {
             block1,
             block2,
+            capsule,
             h1,
             h2,
             assets,
@@ -327,29 +332,35 @@ impl MainState {
     }
     fn load_collision_stuff(&mut self) {
         let contacts_query = GeometricQueryType::Contacts(0.0, 0.0);
+
         let cub1 = Cuboid::new(nal::Vector2::new((self.block1.size.x/2.0), self.block1.size.y/2.0));
         let cub2 = Cuboid::new(nal::Vector2::new((self.block2.size.x/2.0), self.block2.size.y/2.0));
-
-        let rect = ShapeHandle::new(cub1);
-        let rect2 = ShapeHandle::new(cub2);
+        let rect1 = ShapeHandle::new(cub2);
+        let ball1 = Ball::new(BALL_RADIUS);
+        let cap = ShapeHandle::new(Capsule::new((self.capsule.size.y - (BALL_RADIUS * 2.0)) / 2.0, BALL_RADIUS));
+        let ballh = ShapeHandle::new(ball1);
 
         let rot = -(std::f32::consts::PI / 4.0);
-        let pos1 = Isometry2::new(nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), rot);
+        let pos1 = Isometry2::new(nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0);
         let pos2 = Isometry2::new(nal::Vector2::new(self.block2.pos.x, self.block2.pos.y), 0.0);
+        let pos3 = Isometry2::new(nal::Vector2::new(self.capsule.pos.x, self.capsule.pos.y), 0.0);
         let mut groups = CollisionGroups::new();
+        let mut groups2 = CollisionGroups::new();
         groups.set_membership(&[1]);
+//        groups.set_whitelist(&[3]);
+        groups2.set_membership(&[2]);
 
-        let handle = self.world.add(pos1, rect.clone(), groups, contacts_query, true).0;
-        let handle2 = self.world.add(pos2, rect2.clone(), groups, contacts_query, true).0;
+        let handle = self.world.add(pos3, cap.clone(), groups, contacts_query, true).0;
+        let handle2 = self.world.add(pos2, rect1.clone(), groups2, contacts_query, true).0;
         self.h1.push(handle);
         self.h2.push(handle);
     }
     fn update_collision_stuff(&mut self) {
         if !self.contact {
             let rot = -(std::f32::consts::PI / 4.0);
-//            self.block1.pos.x -= 0.2;
-            self.block1.pos.y -= 0.2;
-            let new_pos = Isometry2::new(nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), rot);
+            self.capsule.pos.x -= 0.4;
+            self.capsule.pos.y += 0.4;
+            let new_pos = Isometry2::new(nal::Vector2::new(self.capsule.pos.x, self.capsule.pos.y), 0.0);
             let handle = self.world.get_mut(self.h1[0]).unwrap();
             handle.set_position(new_pos);
         }
@@ -366,15 +377,32 @@ fn draw_actor(
     let (screen_w, screen_h) = world_coords;
     let pos = world_to_screen_coords(screen_w, screen_h, actor.pos);
 
-    let scale = Vector2::new(
-        actor.size.x / image.width() as f32,
-        actor.size.y / image.height() as f32,
-    );
+    let scale;
+    match actor.tag {
+        ActorType::Block => {
+            scale = Vector2::new(
+                actor.size.x / image.width() as f32,
+                actor.size.y / image.height() as f32,
+            );
+        },
+        ActorType::Ball => {
+            scale = Vector2::new(
+                (BALL_RADIUS * 2.0) / image.width() as f32,
+                (BALL_RADIUS * 2.0) / image.height() as f32,
+            );
+        },
+        ActorType::Paddle => {
+            scale = Vector2::new(
+                actor.size.x / image.width() as f32,
+                actor.size.y / image.height() as f32,
+            );
+        },
+    }
     let drawparams = graphics::DrawParam::new()
         .dest(pos)
-//        .scale(scale)
+        .scale(scale)
 //        .color(actor.color)
-        .rotation(std::f32::consts::PI / num)
+//        .rotation(std::f32::consts::PI / num)
         .offset(Point2::new(0.5, 0.5));
 
     graphics::draw(ctx, image, drawparams)
@@ -385,7 +413,6 @@ impl ggez::event::EventHandler for MainState {
 
         while timer::check_update_time(ctx, DESIRED_FPS) {
             let seconds = 1.0 / (DESIRED_FPS as f32);
-
 
             for event in self.world.contact_events() {
                 print!("\nContact Event!\n");
@@ -417,8 +444,9 @@ impl ggez::event::EventHandler for MainState {
         let assets = &mut self.assets;
         graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
 
-        draw_actor(assets, ctx, &self.block1, (self.screen_width, self.screen_height), 4.0)?;
+//        draw_actor(assets, ctx, &self.block1, (self.screen_width, self.screen_height), 1.0)?;
         draw_actor(assets, ctx, &self.block2, (self.screen_width, self.screen_height), 1.0)?;
+        draw_actor(assets, ctx, &self.capsule, (self.screen_width, self.screen_height), 1.0)?;
 
         graphics::present(ctx)?;
         Ok(())
